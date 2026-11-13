@@ -71,6 +71,7 @@ input[type=text],input[type=number],input[type=date],textarea,select{
   background:var(--surface);color:var(--ink);width:100%;
 }
 input:focus,textarea:focus,select:focus{outline:none;border-color:var(--orange);}
+.field.error input{border-color:var(--danger);}
 
 .count{font-size:12.5px;color:var(--muted);font-weight:700;margin:0 2px 8px;}
 
@@ -217,9 +218,10 @@ textarea{min-height:60px;resize:vertical;}
         <input type="file" id="photoInputGallery" accept="image/*" multiple hidden>
       </div>
 
-      <div class="field">
+      <div class="field" id="nameField">
         <label for="f-name">Nom du soda</label>
-        <input type="text" id="f-name" placeholder="Ex. Fanta Orange, Coca Zero…" required>
+        <input type="text" id="f-name" placeholder="Ex. Fanta Orange, Coca Zero…">
+        <div id="nameError" style="display:none;color:var(--danger);font-size:12px;font-weight:700;">Donne un nom à ce soda avant d'enregistrer.</div>
       </div>
       <div class="row2">
         <div class="field">
@@ -373,6 +375,11 @@ textarea{min-height:60px;resize:vertical;}
   }
 
   /* ---------- Rating slider ---------- */
+  document.getElementById('f-name').addEventListener('input', function(){
+    document.getElementById('nameField').classList.remove('error');
+    document.getElementById('nameError').style.display = 'none';
+  });
+
   var ratingInput = document.getElementById('f-rating');
   var ratingValue = document.getElementById('ratingValue');
   function syncRatingDisplay(){
@@ -496,10 +503,13 @@ textarea{min-height:60px;resize:vertical;}
   function openSheet(id){
     editingId = id;
     pendingPhotos = [];
+    isSubmitting = false;
     document.getElementById('drinkForm').reset();
     document.getElementById('f-date').value = new Date().toISOString().slice(0,10);
     ratingInput.value = 7; syncRatingDisplay();
     yukaInput.value = '';
+    document.getElementById('nameField').classList.remove('error');
+    document.getElementById('nameError').style.display = 'none';
     scanBox.classList.remove('active');
 
     if(id){
@@ -539,10 +549,23 @@ textarea{min-height:60px;resize:vertical;}
     }
   });
 
+  var isSubmitting = false;
   document.getElementById('drinkForm').addEventListener('submit', function(e){
     e.preventDefault();
-    var name = document.getElementById('f-name').value.trim();
-    if(!name) return;
+    if(isSubmitting) return;
+    var nameInput = document.getElementById('f-name');
+    var nameField = document.getElementById('nameField');
+    var name = nameInput.value.trim();
+    if(!name){
+      nameField.classList.add('error');
+      document.getElementById('nameError').style.display = 'block';
+      nameField.scrollIntoView({behavior:'smooth', block:'center'});
+      nameInput.focus();
+      return;
+    }
+    nameField.classList.remove('error');
+    document.getElementById('nameError').style.display = 'none';
+    isSubmitting = true;
     var entry = {
       id: editingId || uid(),
       name: name,
