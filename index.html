@@ -143,13 +143,6 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--orange);
 .rating-value{text-align:center;font-family:'Fredoka';font-weight:700;font-size:34px;margin-bottom:6px;}
 input[type=range]{width:100%;accent-color:var(--orange-deep);height:8px;}
 
-.yuka-badges{display:flex;gap:6px;margin-top:6px;}
-.yuka-badges button{
-  flex:1;padding:8px 2px;border-radius:10px;border:2px solid var(--line);background:var(--surface);
-  font-weight:800;font-size:11px;cursor:pointer;color:var(--muted);
-}
-.yuka-badges button.sel{color:#fff;border-color:transparent;}
-
 .actions{display:flex;gap:10px;margin-top:16px;}
 .btn{flex:1;padding:14px;border-radius:14px;border:none;font-weight:700;font-size:15px;cursor:pointer;}
 .btn-primary{background:linear-gradient(145deg, var(--orange), var(--orange-deep));color:#fff;}
@@ -208,6 +201,8 @@ textarea{min-height:60px;resize:vertical;}
     </div>
 
     <button class="scan-btn" id="scanOpenBtn" type="button">📷 Scanner le code-barres</button>
+    <button type="button" class="btn btn-ghost" id="scanFromGalleryBtn" style="width:100%;margin:-8px 0 14px;">🖼️ Importer une photo du code-barres</button>
+    <input type="file" id="barcodeImageInput" accept="image/*" hidden>
     <div id="scanBox">
       <div id="scanReader"></div>
       <div class="scan-status" id="scanStatus">Vise le code-barres avec ton appareil photo…</div>
@@ -219,6 +214,7 @@ textarea{min-height:60px;resize:vertical;}
         <label>Photos</label>
         <div class="photos" id="photosRow"></div>
         <input type="file" id="photoInput" accept="image/*" capture="environment" multiple hidden>
+        <input type="file" id="photoInputGallery" accept="image/*" multiple hidden>
       </div>
 
       <div class="field">
@@ -267,14 +263,9 @@ textarea{min-height:60px;resize:vertical;}
       </div>
 
       <div class="field">
-        <label>Note Yuka</label>
-        <div class="yuka-badges" id="yukaBadges">
-          <button type="button" data-v="90" style="--c:var(--good)">Excellent</button>
-          <button type="button" data-v="60" style="--c:var(--lime)">Bon</button>
-          <button type="button" data-v="35" style="--c:var(--warn)">Médiocre</button>
-          <button type="button" data-v="10" style="--c:var(--danger)">Mauvais</button>
-        </div>
-        <input type="hidden" id="f-yuka" value="">
+        <label for="f-yuka">Note Yuka (/100)</label>
+        <input type="number" id="f-yuka" min="0" max="100" step="1" placeholder="Ex. 72">
+        <div style="font-size:11.5px;color:var(--muted);font-weight:600;margin-top:2px;">Yuka n'a pas d'API publique accessible : une estimation est proposée après un scan à partir du Nutri-Score, à corriger avec le vrai score de l'appli Yuka si tu l'as sous la main.</div>
       </div>
 
       <div class="field">
@@ -342,13 +333,21 @@ textarea{min-height:60px;resize:vertical;}
     });
   }
 
-  document.getElementById('photoInput').addEventListener('change', function(e){
-    var files = Array.prototype.slice.call(e.target.files || []);
+  function handlePhotoFiles(fileList){
+    var files = Array.prototype.slice.call(fileList || []);
+    if(!files.length) return;
     Promise.all(files.map(function(f){ return resizeImage(f, 900, 0.72); }))
       .then(function(dataUrls){
         pendingPhotos = pendingPhotos.concat(dataUrls);
         renderPhotosRow();
       });
+  }
+  document.getElementById('photoInput').addEventListener('change', function(e){
+    handlePhotoFiles(e.target.files);
+    e.target.value = '';
+  });
+  document.getElementById('photoInputGallery').addEventListener('change', function(e){
+    handlePhotoFiles(e.target.files);
     e.target.value = '';
   });
 
@@ -356,9 +355,14 @@ textarea{min-height:60px;resize:vertical;}
     var row = document.getElementById('photosRow');
     row.innerHTML = pendingPhotos.map(function(src, i){
       return '<div class="photo-thumb"><img src="'+src+'"><button type="button" data-i="'+i+'">✕</button></div>';
-    }).join('') + '<button type="button" class="add-photo" id="addPhotoBtn">+</button>';
-    document.getElementById('addPhotoBtn').addEventListener('click', function(){
+    }).join('') +
+      '<button type="button" class="add-photo" id="addPhotoCameraBtn" title="Prendre une photo">📷</button>' +
+      '<button type="button" class="add-photo" id="addPhotoGalleryBtn" title="Choisir depuis la galerie">🖼️</button>';
+    document.getElementById('addPhotoCameraBtn').addEventListener('click', function(){
       document.getElementById('photoInput').click();
+    });
+    document.getElementById('addPhotoGalleryBtn').addEventListener('click', function(){
+      document.getElementById('photoInputGallery').click();
     });
     Array.prototype.forEach.call(row.querySelectorAll('.photo-thumb button'), function(btn){
       btn.addEventListener('click', function(){
@@ -385,22 +389,7 @@ textarea{min-height:60px;resize:vertical;}
     return 'var(--danger)';
   }
 
-  /* ---------- Yuka badges ---------- */
-  var yukaWrap = document.getElementById('yukaBadges');
   var yukaInput = document.getElementById('f-yuka');
-  yukaWrap.addEventListener('click', function(e){
-    var btn = e.target.closest('button');
-    if(!btn) return;
-    setYuka(btn.dataset.v);
-  });
-  function setYuka(v){
-    yukaInput.value = v;
-    Array.prototype.forEach.call(yukaWrap.children, function(b){
-      var on = b.dataset.v === String(v);
-      b.classList.toggle('sel', on);
-      b.style.background = on ? b.style.getPropertyValue('--c') : '';
-    });
-  }
 
   /* ---------- Barcode scan + Open Food Facts ---------- */
   var scanOpenBtn = document.getElementById('scanOpenBtn');
@@ -442,6 +431,35 @@ textarea{min-height:60px;resize:vertical;}
     scanBox.classList.remove('active');
   }
 
+  document.getElementById('scanFromGalleryBtn').addEventListener('click', function(){
+    document.getElementById('barcodeImageInput').click();
+  });
+  document.getElementById('barcodeImageInput').addEventListener('change', function(e){
+    var file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if(!file) return;
+    if(typeof Html5Qrcode === 'undefined'){
+      scanStatus.textContent = "Le lecteur n'a pas pu se charger (vérifie ta connexion).";
+      scanBox.classList.add('active');
+      return;
+    }
+    scanBox.classList.add('active');
+    scanStatus.textContent = 'Lecture du code-barres dans la photo…';
+    var fileReader = new Html5Qrcode('scanReader', { formatsToSupport: [
+      Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E
+    ], verbose:false });
+    fileReader.scanFile(file, false).then(function(decodedText){
+      scanStatus.textContent = 'Code détecté : ' + decodedText;
+      scanBox.classList.remove('active');
+      fileReader.clear();
+      lookupBarcode(decodedText);
+    }).catch(function(){
+      scanStatus.textContent = "Aucun code-barres reconnu dans cette photo. Réessaie ou entre-le à la main.";
+      fileReader.clear();
+    });
+  });
+
   function lookupBarcode(code){
     document.getElementById('f-barcode').value = code;
     scanStatus.textContent = 'Recherche de la fiche produit…';
@@ -458,6 +476,10 @@ textarea{min-height:60px;resize:vertical;}
         if(img){
           pendingPhotos.push(img);
           renderPhotosRow();
+        }
+        if(p.nutriscore_grade && !yukaInput.value){
+          var estimate = { a:88, b:68, c:48, d:28, e:12 }[String(p.nutriscore_grade).toLowerCase()];
+          if(estimate != null) yukaInput.value = estimate;
         }
       }
     }).catch(function(){
@@ -477,7 +499,7 @@ textarea{min-height:60px;resize:vertical;}
     document.getElementById('drinkForm').reset();
     document.getElementById('f-date').value = new Date().toISOString().slice(0,10);
     ratingInput.value = 7; syncRatingDisplay();
-    setYuka('');
+    yukaInput.value = '';
     scanBox.classList.remove('active');
 
     if(id){
@@ -494,7 +516,7 @@ textarea{min-height:60px;resize:vertical;}
       document.getElementById('f-sucre').value = d.sucre ?? '';
       document.getElementById('f-date').value = d.date || new Date().toISOString().slice(0,10);
       document.getElementById('f-note').value = d.note || '';
-      setYuka(d.yuka != null ? String(d.yuka) : '');
+      yukaInput.value = d.yuka != null ? d.yuka : '';
       pendingPhotos = (d.photos || []).slice();
     } else {
       document.getElementById('sheetTitle').textContent = 'Nouveau soda';
@@ -530,7 +552,7 @@ textarea{min-height:60px;resize:vertical;}
       lieu: document.getElementById('f-lieu').value.trim(),
       prix: document.getElementById('f-prix').value ? parseFloat(document.getElementById('f-prix').value) : null,
       sucre: document.getElementById('f-sucre').value ? parseFloat(document.getElementById('f-sucre').value) : null,
-      yuka: yukaInput.value ? parseInt(yukaInput.value,10) : null,
+      yuka: yukaInput.value ? Math.max(0, Math.min(100, parseInt(yukaInput.value,10))) : null,
       date: document.getElementById('f-date').value || new Date().toISOString().slice(0,10),
       note: document.getElementById('f-note').value.trim(),
       photos: pendingPhotos.slice()
