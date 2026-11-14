@@ -173,6 +173,15 @@ input[type=range]{width:100%;accent-color:var(--orange-deep);height:8px;}
 .btn-ghost{background:var(--surface-2);color:var(--ink);}
 .btn-danger{background:none;color:var(--danger);font-weight:700;}
 
+.account-row{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+.btn-account{
+  flex:1;padding:10px 14px;border-radius:14px;border:2px solid var(--teal);background:color-mix(in srgb, var(--teal) 10%, transparent);
+  color:var(--teal);font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.account-signed{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:6px 10px;flex:1;min-width:0;}
+.account-avatar{width:26px;height:26px;border-radius:50%;flex-shrink:0;background:var(--surface-2);}
+.account-signed span{flex:1;font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+
 .install-banner{
   display:none; align-items:center; gap:10px; background:var(--surface); border:2px solid var(--teal);
   border-radius:16px; padding:10px 12px; margin-bottom:14px; box-shadow:var(--shadow);
@@ -192,6 +201,15 @@ textarea{min-height:60px;resize:vertical;}
     <div class="eyebrow">Journal perso</div>
     <h1>🥤 Carnet à <span>Sodas</span></h1>
   </header>
+
+  <div class="account-row" id="accountRow">
+    <button type="button" class="btn-account" id="signInBtn">🔐 Sauvegarder dans le cloud (Google)</button>
+    <div class="account-signed" id="accountSigned" hidden>
+      <img id="accountAvatar" class="account-avatar" alt="">
+      <span id="accountEmail"></span>
+      <button type="button" class="icon-btn" id="signOutBtn" title="Déconnexion">⎋</button>
+    </div>
+  </div>
 
   <div class="install-banner" id="installBanner">
     <div class="txt" id="installTxt">Installe l'app sur ton téléphone pour l'ouvrir en un tap.</div>
@@ -368,8 +386,122 @@ textarea{min-height:60px;resize:vertical;}
 </div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  initializeFirestore, persistentLocalCache, collection, doc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
 (function(){
+  /* ---------- Cloud (Firebase) ---------- */
+  var firebaseConfig = {
+    apiKey: "AIzaSyAd0iSUlyiNUnAsdbG0F7G2A4-FuJ69hKI",
+    authDomain: "carnet-sodas.firebaseapp.com",
+    projectId: "carnet-sodas",
+    storageBucket: "carnet-sodas.firebasestorage.app",
+    messagingSenderId: "278909625015",
+    appId: "1:278909625015:web:c1e4711e13c761e6656332"
+  };
+  var fbApp = initializeApp(firebaseConfig);
+  var auth = getAuth(fbApp);
+  var db = initializeFirestore(fbApp, { localCache: persistentLocalCache() });
+  var currentUser = null;
+  var unsubDrinks = null, unsubWishlist = null;
+
+  function drinksCol(){ return collection(db, 'users', currentUser.uid, 'drinks'); }
+  function wishCol(){ return collection(db, 'users', currentUser.uid, 'wishlist'); }
+
+  function attachCloudListeners(){
+    unsubDrinks = onSnapshot(drinksCol(), function(snap){
+      drinks = snap.docs.map(function(d){ return d.data(); });
+      save();
+      render();
+    });
+    unsubWishlist = onSnapshot(wishCol(), function(snap){
+      wishlist = snap.docs.map(function(d){ return d.data(); });
+      saveWishlist();
+      render();
+    });
+  }
+  function detachCloudListeners(){
+    if(unsubDrinks){ unsubDrinks(); unsubDrinks = null; }
+    if(unsubWishlist){ unsubWishlist(); unsubWishlist = null; }
+  }
+  function mergeLocalIntoCloud(){
+    return Promise.all([getDocs(drinksCol()), getDocs(wishCol())]).then(function(results){
+      var cloudDrinkIds = {}, cloudWishIds = {};
+      results[0].forEach(function(d){ cloudDrinkIds[d.id] = true; });
+      results[1].forEach(function(d){ cloudWishIds[d.id] = true; });
+      var batch = writeBatch(db);
+      var any = false;
+      drinks.forEach(function(d){ if(!cloudDrinkIds[d.id]){ batch.set(doc(drinksCol(), d.id), d); any = true; } });
+      wishlist.forEach(function(w){ if(!cloudWishIds[w.id]){ batch.set(doc(wishCol(), w.id), w); any = true; } });
+      return any ? batch.commit() : Promise.resolve();
+    });
+  }
+
+  onAuthStateChanged(auth, function(user){
+    currentUser = user;
+    var signInBtn = document.getElementById('signInBtn');
+    var signedBox = document.getElementById('accountSigned');
+    if(user){
+      signInBtn.hidden = true;
+      signedBox.hidden = false;
+      document.getElementById('accountEmail').textContent = user.email || '';
+      document.getElementById('accountAvatar').src = user.photoURL || '';
+      mergeLocalIntoCloud().catch(function(e){ console.error('Fusion cloud échouée', e); })
+        .then(function(){ attachCloudListeners(); });
+    } else {
+      detachCloudListeners();
+      signInBtn.hidden = false;
+      signedBox.hidden = true;
+    }
+  });
+  getRedirectResult(auth).catch(function(e){ console.error('Connexion échouée', e); });
+
+  document.getElementById('signInBtn').addEventListener('click', function(){
+    signInWithRedirect(auth, new GoogleAuthProvider());
+  });
+  document.getElementById('signOutBtn').addEventListener('click', function(){
+    signOut(auth);
+  });
+
+  function upsertDrink(entry){
+    var idx = drinks.findIndex(function(d){ return d.id === entry.id; });
+    if(idx > -1) drinks[idx] = entry; else drinks.unshift(entry);
+    save();
+    if(currentUser){
+      setDoc(doc(drinksCol(), entry.id), entry).catch(function(e){
+        console.error('Sync échouée', e);
+        alert("La sauvegarde cloud a échoué pour ce soda (peut-être trop de photos). Il reste enregistré sur ce téléphone.");
+      });
+    }
+  }
+  function removeDrink(id){
+    drinks = drinks.filter(function(d){ return d.id !== id; });
+    save();
+    if(currentUser){
+      deleteDoc(doc(drinksCol(), id)).catch(function(e){ console.error('Sync échouée', e); });
+    }
+  }
+  function upsertWish(item){
+    var idx = wishlist.findIndex(function(w){ return w.id === item.id; });
+    if(idx > -1) wishlist[idx] = item; else wishlist.unshift(item);
+    saveWishlist();
+    if(currentUser){
+      setDoc(doc(wishCol(), item.id), item).catch(function(e){ console.error('Sync échouée', e); });
+    }
+  }
+  function removeWish(id){
+    wishlist = wishlist.filter(function(w){ return w.id !== id; });
+    saveWishlist();
+    if(currentUser){
+      deleteDoc(doc(wishCol(), id)).catch(function(e){ console.error('Sync échouée', e); });
+    }
+  }
   var STORAGE_KEY = 'carnet-sodas-v1';
   var GEOCACHE_KEY = 'carnet-sodas-geocache-v1';
   var WISHLIST_KEY = 'carnet-sodas-wishlist-v1';
@@ -659,8 +791,8 @@ textarea{min-height:60px;resize:vertical;}
   document.getElementById('deleteBtn').addEventListener('click', function(){
     if(!editingId) return;
     if(confirm('Supprimer ce soda ?')){
-      drinks = drinks.filter(function(d){ return d.id !== editingId; });
-      save(); closeSheet(); render();
+      removeDrink(editingId);
+      closeSheet(); render();
     }
   });
 
@@ -696,18 +828,11 @@ textarea{min-height:60px;resize:vertical;}
       note: document.getElementById('f-note').value.trim(),
       photos: pendingPhotos.slice()
     };
-    if(editingId){
-      var idx = drinks.findIndex(function(d){ return d.id === editingId; });
-      if(idx > -1) drinks[idx] = entry;
-    } else {
-      drinks.unshift(entry);
-      if(convertingWishId){
-        wishlist = wishlist.filter(function(w){ return w.id !== convertingWishId; });
-        saveWishlist();
-        convertingWishId = null;
-      }
+    upsertDrink(entry);
+    if(!editingId && convertingWishId){
+      removeWish(convertingWishId);
+      convertingWishId = null;
     }
-    save();
     closeSheet();
     render();
   });
@@ -744,14 +869,13 @@ textarea{min-height:60px;resize:vertical;}
     nameField.classList.remove('error');
     document.getElementById('wishNameError').style.display = 'none';
     wishIsSubmitting = true;
-    wishlist.unshift({
+    upsertWish({
       id: uid(),
       name: name,
       brand: document.getElementById('w-brand').value.trim(),
       note: document.getElementById('w-note').value.trim(),
       date: new Date().toISOString().slice(0,10)
     });
-    saveWishlist();
     closeWishSheet();
     renderWishlist();
   });
@@ -783,8 +907,7 @@ textarea{min-height:60px;resize:vertical;}
     });
     Array.prototype.forEach.call(el.querySelectorAll('.wish-del'), function(btn){
       btn.addEventListener('click', function(){
-        wishlist = wishlist.filter(function(w){ return w.id !== btn.dataset.id; });
-        saveWishlist();
+        removeWish(btn.dataset.id);
         renderWishlist();
       });
     });
