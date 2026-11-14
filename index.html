@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Carnet à Sodas</title>
-<meta name="description" content="Note, photographie et retrouve tous les sodas que tu as testés.">
+<title>Boissons du monde</title>
+<meta name="description" content="Note, photographie et retrouve toutes les boissons que tu as testées.">
 <meta name="theme-color" content="#FF6B4A">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Carnet Sodas">
+<meta name="apple-mobile-web-app-title" content="Boissons du monde">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -199,7 +199,7 @@ textarea{min-height:60px;resize:vertical;}
 <div class="wrap">
   <header class="top">
     <div class="eyebrow">Journal perso</div>
-    <h1>🥤 Carnet à <span>Sodas</span></h1>
+    <h1>🥤 Boissons du <span>Monde</span></h1>
   </header>
 
   <div class="account-row" id="accountRow">
@@ -260,13 +260,13 @@ textarea{min-height:60px;resize:vertical;}
   </div>
 </div>
 
-<button class="fab" id="fabAdd" type="button" aria-label="Ajouter un soda">+</button>
+<button class="fab" id="fabAdd" type="button" aria-label="Ajouter une boisson">+</button>
 
 <div class="sheet-overlay" id="sheetOverlay" hidden>
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="sheet-head">
-      <h2 id="sheetTitle">Nouveau soda</h2>
+      <h2 id="sheetTitle">Nouvelle boisson</h2>
       <button class="icon-btn" id="sheetClose" type="button" aria-label="Fermer">✕</button>
     </div>
 
@@ -288,9 +288,9 @@ textarea{min-height:60px;resize:vertical;}
       </div>
 
       <div class="field" id="nameField">
-        <label for="f-name">Nom du soda</label>
+        <label for="f-name">Nom de la boisson</label>
         <input type="text" id="f-name" placeholder="Ex. Fanta Orange, Coca Zero…">
-        <div id="nameError" style="display:none;color:var(--danger);font-size:12px;font-weight:700;">Donne un nom à ce soda avant d'enregistrer.</div>
+        <div id="nameError" style="display:none;color:var(--danger);font-size:12px;font-weight:700;">Donne un nom à cette boisson avant d'enregistrer.</div>
       </div>
       <div class="row2">
         <div class="field">
@@ -366,7 +366,7 @@ textarea{min-height:60px;resize:vertical;}
     </div>
     <form id="wishForm">
       <div class="field" id="wishNameField">
-        <label for="w-name">Nom du soda</label>
+        <label for="w-name">Nom de la boisson</label>
         <input type="text" id="w-name" placeholder="Ex. Irn-Bru">
         <div id="wishNameError" style="display:none;color:var(--danger);font-size:12px;font-weight:700;">Donne un nom avant d'ajouter.</div>
       </div>
@@ -513,7 +513,7 @@ import {
     if(currentUser){
       setDoc(doc(drinksCol(), entry.id), entry).catch(function(e){
         console.error('Sync échouée', e);
-        alert("La sauvegarde cloud a échoué pour ce soda (peut-être trop de photos). Il reste enregistré sur ce téléphone.");
+        alert("La sauvegarde cloud a échoué pour cette boisson (peut-être trop de photos). Elle reste enregistrée sur ce téléphone.");
       });
     }
   }
@@ -788,7 +788,7 @@ import {
 
     if(id){
       var d = drinks.find(function(x){ return x.id === id; });
-      document.getElementById('sheetTitle').textContent = 'Modifier le soda';
+      document.getElementById('sheetTitle').textContent = 'Modifier la boisson';
       document.getElementById('submitBtn').textContent = 'Enregistrer';
       document.getElementById('deleteBtn').hidden = false;
       document.getElementById('f-name').value = d.name;
@@ -804,7 +804,7 @@ import {
       yukaInput.value = d.yuka != null ? d.yuka : '';
       pendingPhotos = (d.photos || []).slice();
     } else {
-      document.getElementById('sheetTitle').textContent = 'Nouveau soda';
+      document.getElementById('sheetTitle').textContent = 'Nouvelle boisson';
       document.getElementById('submitBtn').textContent = 'Ajouter';
       document.getElementById('deleteBtn').hidden = true;
     }
@@ -827,7 +827,7 @@ import {
 
   document.getElementById('deleteBtn').addEventListener('click', function(){
     if(!editingId) return;
-    if(confirm('Supprimer ce soda ?')){
+    if(confirm('Supprimer cette boisson ?')){
       removeDrink(editingId);
       closeSheet(); render();
     }
@@ -922,7 +922,7 @@ import {
     document.getElementById('wishCount').textContent =
       wishlist.length + (wishlist.length===1 ? ' envie' : ' envies');
     if(!wishlist.length){
-      el.innerHTML = '<div class="empty"><div class="big">⭐</div><div class="display">Aucune envie pour l\'instant</div>Ajoute un soda que tu veux essayer avec le +.</div>';
+      el.innerHTML = '<div class="empty"><div class="big">⭐</div><div class="display">Aucune envie pour l\'instant</div>Ajoute une boisson que tu veux essayer avec le +.</div>';
       return;
     }
     el.innerHTML = wishlist.map(function(w){
@@ -952,18 +952,18 @@ import {
 
   /* ---------- Badges ---------- */
   var BADGES = [
-    { icon:'🥤', label:'Premier soda', check: function(s){ return s.total >= 1; } },
-    { icon:'🔟', label:'10 sodas testés', check: function(s){ return s.total >= 10; } },
-    { icon:'💯', label:'100 sodas testés', check: function(s){ return s.total >= 100; } },
+    { icon:'🥤', label:'Première boisson', check: function(s){ return s.total >= 1; } },
+    { icon:'🔟', label:'10 boissons testées', check: function(s){ return s.total >= 10; } },
+    { icon:'💯', label:'100 boissons testées', check: function(s){ return s.total >= 100; } },
     { icon:'📍', label:'5 lieux différents', check: function(s){ return s.places >= 5; } },
     { icon:'🌍', label:'5 pays différents', check: function(s){ return s.countries >= 5; } },
     { icon:'🌎', label:'10 pays différents', check: function(s){ return s.countries >= 10; } },
     { icon:'🏷️', label:'5 marques différentes', check: function(s){ return s.brands >= 5; } },
     { icon:'⭐', label:'Un coup de cœur (10/10)', check: function(s){ return s.hasMaxRating; } },
-    { icon:'🧊', label:'Un soda 0g de sucre', check: function(s){ return s.hasZeroSugar; } },
+    { icon:'🧊', label:'Une boisson 0g de sucre', check: function(s){ return s.hasZeroSugar; } },
     { icon:'📸', label:'10 photos prises', check: function(s){ return s.photoCount >= 10; } },
     { icon:'🗓️', label:'7 jours de dégustation', check: function(s){ return s.distinctDays >= 7; } },
-    { icon:'🏆', label:'Moyenne ≥ 8 (5 sodas min.)', check: function(s){ return s.total >= 5 && s.avg >= 8; } }
+    { icon:'🏆', label:'Moyenne ≥ 8 (5 boissons min.)', check: function(s){ return s.total >= 5 && s.avg >= 8; } }
   ];
 
   function computeStats(){
@@ -1016,7 +1016,7 @@ import {
     var withSucre = drinks.filter(function(d){ return d.sucre != null; });
     var avgSucre = withSucre.length ? (withSucre.reduce(function(s,d){return s+d.sucre;},0)/withSucre.length) : null;
     el.innerHTML =
-      '<div class="stat"><div class="num">' + total + '</div><div class="label">Sodas testés</div></div>' +
+      '<div class="stat"><div class="num">' + total + '</div><div class="label">Boissons testées</div></div>' +
       '<div class="stat"><div class="num">' + (total ? avg.toFixed(1) : '–') + '</div><div class="label">Note moyenne /10</div></div>' +
       '<div class="stat"><div class="num">' + (avgSucre!=null ? avgSucre.toFixed(1)+'g' : '–') + '</div><div class="label">Sucre moyen /100ml</div></div>';
   }
@@ -1080,10 +1080,10 @@ import {
     renderPaysFilterOptions();
     var list = getFiltered();
     document.getElementById('count').textContent =
-      list.length + (list.length===1?' soda':' sodas') + (drinks.length!==list.length ? ' sur '+drinks.length : '');
+      list.length + (list.length===1?' boisson':' boissons') + (drinks.length!==list.length ? ' sur '+drinks.length : '');
     var container = document.getElementById('list');
     if(!list.length){
-      container.innerHTML = '<div class="empty"><div class="big">🥤</div><div class="display">Carnet vide</div>Tape sur + pour ajouter ton premier soda.</div>';
+      container.innerHTML = '<div class="empty"><div class="big">🥤</div><div class="display">Carnet vide</div>Tape sur + pour ajouter ta première boisson.</div>';
       return;
     }
     container.innerHTML = list.map(function(d){
@@ -1171,7 +1171,7 @@ import {
     });
     var marker = L.marker([coords.lat, coords.lon], { icon: icon }).addTo(leafletMap);
     var names = group.items.slice(0,5).map(function(d){ return escapeHtml(d.name); }).join(', ') + (group.items.length>5 ? '…' : '');
-    marker.bindPopup('<strong>'+escapeHtml(group.lieu)+'</strong><br>'+group.items.length+' soda'+(group.items.length>1?'s':'')+' · note moy. '+avg.toFixed(1)+'<br><span style="font-size:12px;">'+names+'</span>');
+    marker.bindPopup('<strong>'+escapeHtml(group.lieu)+'</strong><br>'+group.items.length+' boisson'+(group.items.length>1?'s':'')+' · note moy. '+avg.toFixed(1)+'<br><span style="font-size:12px;">'+names+'</span>');
     mapMarkers.push({ key:key, marker:marker });
   }
 
@@ -1179,7 +1179,7 @@ import {
     var el = document.getElementById('mapPlaces');
     var keys = Object.keys(groups).sort(function(a,b){ return groups[b].items.length - groups[a].items.length; });
     if(!keys.length){
-      el.innerHTML = '<div class="empty"><div class="big">🗺️</div><div class="display">Aucun lieu renseigné</div>Ajoute une ville ou un pays à tes sodas pour les voir ici.</div>';
+      el.innerHTML = '<div class="empty"><div class="big">🗺️</div><div class="display">Aucun lieu renseigné</div>Ajoute une ville ou un pays à tes boissons pour les voir ici.</div>';
       return;
     }
     el.innerHTML = keys.map(function(key){
@@ -1189,7 +1189,7 @@ import {
         '<div class="thumb">📍</div>' +
         '<div class="main">' +
           '<div class="name">'+escapeHtml(g.lieu)+'</div>' +
-          '<div class="meta">'+g.items.length+' soda'+(g.items.length>1?'s':'')+' · note moy. '+avg.toFixed(1)+'</div>' +
+          '<div class="meta">'+g.items.length+' boisson'+(g.items.length>1?'s':'')+' · note moy. '+avg.toFixed(1)+'</div>' +
         '</div>' +
         '<div class="score" style="background:'+scoreColor(avg*10)+'">'+avg.toFixed(1).replace('.0','')+'</div>' +
       '</div>';

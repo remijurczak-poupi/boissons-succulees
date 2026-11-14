@@ -1,7 +1,7 @@
 {
-  "name": "Mon Carnet à Sodas",
-  "short_name": "Carnet Sodas",
-  "description": "Note, photographie et retrouve tous les sodas que tu as testés.",
+  "name": "Boissons du monde",
+  "short_name": "Boissons",
+  "description": "Note, photographie et retrouve toutes les boissons que tu as testées.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
