@@ -462,18 +462,46 @@ import {
   });
   getRedirectResult(auth).catch(function(e){ console.error('Connexion (retour redirection) échouée', e); });
 
-  document.getElementById('signInBtn').addEventListener('click', function(){
+  var AUTH_PENDING_KEY = 'sodaAuthPending';
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible' && sessionStorage.getItem(AUTH_PENDING_KEY)){
+      sessionStorage.removeItem(AUTH_PENDING_KEY);
+      // En PWA installée (surtout Android), revenir de la connexion Google ne redéclenche pas
+      // toujours onAuthStateChanged dans cette fenêtre : on force un rechargement pour relire
+      // l'état de connexion (partagé via le stockage du navigateur) à coup sûr.
+      location.reload();
+    }
+  });
+
+  function startGoogleSignIn(){
     var provider = new GoogleAuthProvider();
+    var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    sessionStorage.setItem(AUTH_PENDING_KEY, '1');
+    if(isStandalone){
+      // signInWithPopup n'est pas fiable dans une PWA installée (pas de vraie fenêtre popup) :
+      // on part directement en redirection, plus robuste dans ce contexte.
+      signInWithRedirect(auth, provider).catch(function(e){
+        sessionStorage.removeItem(AUTH_PENDING_KEY);
+        console.error('Connexion (redirection) échouée', e);
+        alert('Connexion impossible : ' + (e && e.message ? e.message : 'erreur inconnue'));
+      });
+      return;
+    }
     signInWithPopup(auth, provider).catch(function(e){
       console.error('Connexion (popup) échouée', e);
-      if(e && e.code === 'auth/popup-closed-by-user') return;
+      if(e && e.code === 'auth/popup-closed-by-user'){ sessionStorage.removeItem(AUTH_PENDING_KEY); return; }
       if(e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment' || e.code === 'auth/cancelled-popup-request')){
-        signInWithRedirect(auth, provider).catch(function(e2){ console.error('Connexion (redirection) échouée', e2); });
+        signInWithRedirect(auth, provider).catch(function(e2){
+          sessionStorage.removeItem(AUTH_PENDING_KEY);
+          console.error('Connexion (redirection) échouée', e2);
+        });
       } else {
+        sessionStorage.removeItem(AUTH_PENDING_KEY);
         alert('Connexion impossible : ' + (e && e.message ? e.message : 'erreur inconnue'));
       }
     });
-  });
+  }
+  document.getElementById('signInBtn').addEventListener('click', startGoogleSignIn);
   document.getElementById('signOutBtn').addEventListener('click', function(){
     signOut(auth);
   });
