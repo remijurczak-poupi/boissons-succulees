@@ -1,4 +1,5 @@
-const CACHE = 'carnet-sodas-v1';
+const VERSION = 'v2';
+const CACHE = 'carnet-sodas-' + VERSION;
 const SHELL = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -16,6 +17,21 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
   if (url.origin !== self.location.origin) return; // never intercept Open Food Facts / CDN calls
+
+  // La page HTML : réseau en priorité pour toujours avoir la dernière version,
+  // le cache ne sert que de secours hors-ligne.
+  if (e.request.mode === 'navigate' || url.pathname.endsWith('/index.html')) {
+    e.respondWith(
+      fetch(e.request).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(e.request, copy));
+        return res;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Le reste (manifest, icônes) : cache d'abord pour la vitesse, mise à jour en tâche de fond.
   e.respondWith(
     caches.match(e.request).then((cached) => {
       const fetchPromise = fetch(e.request).then((res) => {
