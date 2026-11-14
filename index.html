@@ -389,7 +389,7 @@ textarea{min-height:60px;resize:vertical;}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   initializeFirestore, persistentLocalCache, collection, doc, setDoc, deleteDoc, getDocs, onSnapshot, writeBatch
@@ -460,10 +460,19 @@ import {
       signedBox.hidden = true;
     }
   });
-  getRedirectResult(auth).catch(function(e){ console.error('Connexion échouée', e); });
+  getRedirectResult(auth).catch(function(e){ console.error('Connexion (retour redirection) échouée', e); });
 
   document.getElementById('signInBtn').addEventListener('click', function(){
-    signInWithRedirect(auth, new GoogleAuthProvider());
+    var provider = new GoogleAuthProvider();
+    signInWithPopup(auth, provider).catch(function(e){
+      console.error('Connexion (popup) échouée', e);
+      if(e && e.code === 'auth/popup-closed-by-user') return;
+      if(e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment' || e.code === 'auth/cancelled-popup-request')){
+        signInWithRedirect(auth, provider).catch(function(e2){ console.error('Connexion (redirection) échouée', e2); });
+      } else {
+        alert('Connexion impossible : ' + (e && e.message ? e.message : 'erreur inconnue'));
+      }
+    });
   });
   document.getElementById('signOutBtn').addEventListener('click', function(){
     signOut(auth);
