@@ -63,6 +63,16 @@ header.top h1 span{color:var(--ink);}
 .stat .num{font-family:'Fredoka';font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--orange-deep);line-height:1.1;}
 .stat .label{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-top:2px;}
 
+.view-tabs{display:flex;gap:8px;margin-bottom:12px;}
+.view-tab{
+  flex:1;padding:10px;border-radius:14px;border:2px solid var(--line);background:var(--surface);
+  color:var(--muted);font-weight:700;font-size:13.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.view-tab.active{background:linear-gradient(145deg, var(--orange), var(--orange-deep));color:#fff;border-color:transparent;}
+
+.map-box{height:360px;border-radius:18px;overflow:hidden;border:2px solid var(--line);margin-bottom:12px;background:var(--surface-2);}
+.map-box .leaflet-popup-content{font-family:'Nunito',sans-serif;font-size:13px;}
+
 .toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
 .toolbar input[type=text]{flex:1;min-width:120px;}
 .toolbar select{flex:0 0 auto;}
@@ -177,18 +187,31 @@ textarea{min-height:60px;resize:vertical;}
 
   <div class="stats" id="stats"></div>
 
-  <div class="toolbar">
+  <div class="view-tabs" id="viewTabs">
+    <button type="button" class="view-tab active" data-view="list">📋 Liste</button>
+    <button type="button" class="view-tab" data-view="map">🗺️ Carte</button>
+  </div>
+
+  <div class="toolbar" id="toolbar">
     <input type="text" id="search" placeholder="Rechercher...">
     <select id="sortBy">
       <option value="date-desc">Plus récent</option>
       <option value="date-asc">Plus ancien</option>
       <option value="rating-desc">Mieux noté</option>
       <option value="rating-asc">Moins bien noté</option>
+      <option value="sucre-asc">Moins sucré</option>
+      <option value="sucre-desc">Plus sucré</option>
       <option value="name-asc">Nom (A–Z)</option>
     </select>
   </div>
   <div class="count" id="count"></div>
   <div class="list" id="list"></div>
+
+  <div id="mapViewWrap" hidden>
+    <div class="map-box" id="mapContainer"></div>
+    <div class="count" id="mapCount"></div>
+    <div class="list" id="mapPlaces"></div>
+  </div>
 </div>
 
 <button class="fab" id="fabAdd" type="button" aria-label="Ajouter un soda">+</button>
@@ -287,20 +310,29 @@ textarea{min-height:60px;resize:vertical;}
 <script>
 (function(){
   var STORAGE_KEY = 'carnet-sodas-v1';
+  var GEOCACHE_KEY = 'carnet-sodas-geocache-v1';
   var drinks = [];
+  var geocache = {};
   var editingId = null;
   var pendingPhotos = [];
   var html5Qr = null;
+  var currentView = 'list';
 
   function load(){
     try{
       var raw = localStorage.getItem(STORAGE_KEY);
       drinks = raw ? JSON.parse(raw) : seed();
     }catch(e){ drinks = seed(); }
+    try{
+      geocache = JSON.parse(localStorage.getItem(GEOCACHE_KEY)) || {};
+    }catch(e){ geocache = {}; }
   }
   function save(){
     try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(drinks)); }
     catch(e){ alert("Stockage plein : essaie de supprimer d'anciennes photos ou entrées."); }
+  }
+  function saveGeocache(){
+    try{ localStorage.setItem(GEOCACHE_KEY, JSON.stringify(geocache)); }catch(e){}
   }
   function seed(){
     var today = new Date().toISOString().slice(0,10);
@@ -617,6 +649,16 @@ textarea{min-height:60px;resize:vertical;}
         case 'date-asc': return a.date.localeCompare(b.date);
         case 'rating-desc': return (b.rating||0)-(a.rating||0);
         case 'rating-asc': return (a.rating||0)-(b.rating||0);
+        case 'sucre-asc':
+          if(a.sucre==null && b.sucre==null) return 0;
+          if(a.sucre==null) return 1;
+          if(b.sucre==null) return -1;
+          return a.sucre-b.sucre;
+        case 'sucre-desc':
+          if(a.sucre==null && b.sucre==null) return 0;
+          if(a.sucre==null) return 1;
+          if(b.sucre==null) return -1;
+          return b.sucre-a.sucre;
         case 'name-asc': return a.name.localeCompare(b.name,'fr');
         default: return b.date.localeCompare(a.date);
       }
@@ -664,10 +706,161 @@ textarea{min-height:60px;resize:vertical;}
     Array.prototype.forEach.call(container.querySelectorAll('.card'), function(card){
       card.addEventListener('click', function(){ openSheet(card.dataset.id); });
     });
+    if(currentView === 'map') renderMapView();
   }
 
   document.getElementById('search').addEventListener('input', render);
   document.getElementById('sortBy').addEventListener('change', render);
+
+  /* ---------- Map view (par ville/pays) ---------- */
+  var leafletMap = null;
+  var mapMarkers = [];
+  var leafletLoadCbs = null;
+
+  function loadLeaflet(cb){
+    if(window.L){ cb(); return; }
+    if(leafletLoadCbs){ leafletLoadCbs.push(cb); return; }
+    leafletLoadCbs = [cb];
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(link);
+    var script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = function(){
+      var cbs = leafletLoadCbs; leafletLoadCbs = null;
+      cbs.forEach(function(f){ f(); });
+    };
+    document.body.appendChild(script);
+  }
+
+  function groupByLieu(){
+    var groups = {};
+    drinks.forEach(function(d){
+      var lieu = (d.lieu||'').trim();
+      if(!lieu) return;
+      var key = lieu.toLowerCase();
+      if(!groups[key]) groups[key] = { lieu: lieu, items: [] };
+      groups[key].items.push(d);
+    });
+    return groups;
+  }
+
+  function geocodeLieu(lieu, done){
+    var key = lieu.toLowerCase();
+    var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(lieu);
+    fetch(url, { headers: { 'Accept-Language': 'fr' } }).then(function(r){ return r.json(); }).then(function(res){
+      var loc = (res && res[0]) ? { lat: parseFloat(res[0].lat), lon: parseFloat(res[0].lon) } : null;
+      geocache[key] = loc;
+      saveGeocache();
+      done(loc);
+    }).catch(function(){ done(null); });
+  }
+
+  function addMapMarker(key, group, coords){
+    var avg = group.items.reduce(function(s,d){return s+(d.rating||0);},0) / group.items.length;
+    var color = scoreColor(avg*10);
+    var icon = L.divIcon({
+      className: 'map-pin',
+      html: '<div style="background:'+color+';width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-family:Fredoka;font-size:12px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);">'+group.items.length+'</div>',
+      iconSize:[30,30], iconAnchor:[15,15]
+    });
+    var marker = L.marker([coords.lat, coords.lon], { icon: icon }).addTo(leafletMap);
+    var names = group.items.slice(0,5).map(function(d){ return escapeHtml(d.name); }).join(', ') + (group.items.length>5 ? '…' : '');
+    marker.bindPopup('<strong>'+escapeHtml(group.lieu)+'</strong><br>'+group.items.length+' soda'+(group.items.length>1?'s':'')+' · note moy. '+avg.toFixed(1)+'<br><span style="font-size:12px;">'+names+'</span>');
+    mapMarkers.push({ key:key, marker:marker });
+  }
+
+  function renderMapPlacesList(groups, resolvedCoords){
+    var el = document.getElementById('mapPlaces');
+    var keys = Object.keys(groups).sort(function(a,b){ return groups[b].items.length - groups[a].items.length; });
+    if(!keys.length){
+      el.innerHTML = '<div class="empty"><div class="big">🗺️</div><div class="display">Aucun lieu renseigné</div>Ajoute une ville ou un pays à tes sodas pour les voir ici.</div>';
+      return;
+    }
+    el.innerHTML = keys.map(function(key){
+      var g = groups[key];
+      var avg = g.items.reduce(function(s,d){return s+(d.rating||0);},0) / g.items.length;
+      return '<div class="card place-card" data-key="'+encodeURIComponent(key)+'">' +
+        '<div class="thumb">📍</div>' +
+        '<div class="main">' +
+          '<div class="name">'+escapeHtml(g.lieu)+'</div>' +
+          '<div class="meta">'+g.items.length+' soda'+(g.items.length>1?'s':'')+' · note moy. '+avg.toFixed(1)+'</div>' +
+        '</div>' +
+        '<div class="score" style="background:'+scoreColor(avg*10)+'">'+avg.toFixed(1).replace('.0','')+'</div>' +
+      '</div>';
+    }).join('');
+    Array.prototype.forEach.call(el.querySelectorAll('.place-card'), function(card){
+      card.addEventListener('click', function(){
+        var key = decodeURIComponent(card.dataset.key);
+        var coords = resolvedCoords[key];
+        if(!leafletMap || !coords) return;
+        leafletMap.setView([coords.lat, coords.lon], 11, {animate:true});
+        var m = mapMarkers.find(function(mk){ return mk.key === key; });
+        if(m) m.marker.openPopup();
+      });
+    });
+  }
+
+  function renderMapView(){
+    var groups = groupByLieu();
+    var keys = Object.keys(groups);
+    document.getElementById('mapCount').textContent = keys.length + (keys.length===1 ? ' lieu' : ' lieux');
+    loadLeaflet(function(){
+      if(!leafletMap){
+        leafletMap = L.map('mapContainer', { scrollWheelZoom:true });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors',
+          maxZoom: 18
+        }).addTo(leafletMap);
+        leafletMap.setView([46.6, 2.3], 5);
+      }
+      mapMarkers.forEach(function(m){ leafletMap.removeLayer(m.marker); });
+      mapMarkers = [];
+      var resolvedCoords = {};
+      var bounds = [];
+      keys.forEach(function(key){
+        var cached = geocache[key];
+        if(cached){
+          addMapMarker(key, groups[key], cached);
+          resolvedCoords[key] = cached;
+          bounds.push([cached.lat, cached.lon]);
+        }
+      });
+      if(bounds.length) leafletMap.fitBounds(bounds, {padding:[30,30], maxZoom:12});
+      renderMapPlacesList(groups, resolvedCoords);
+
+      var toGeocode = keys.filter(function(key){ return geocache[key] === undefined; });
+      toGeocode.forEach(function(key, i){
+        setTimeout(function(){
+          geocodeLieu(groups[key].lieu, function(loc){
+            if(loc){
+              addMapMarker(key, groups[key], loc);
+              resolvedCoords[key] = loc;
+              var allBounds = mapMarkers.map(function(m){ return m.marker.getLatLng(); }).map(function(ll){ return [ll.lat, ll.lng]; });
+              if(allBounds.length) leafletMap.fitBounds(allBounds, {padding:[30,30], maxZoom:12});
+              renderMapPlacesList(groups, resolvedCoords);
+            }
+          });
+        }, i * 1100);
+      });
+    });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.view-tab'), function(btn){
+    btn.addEventListener('click', function(){
+      currentView = btn.dataset.view;
+      Array.prototype.forEach.call(document.querySelectorAll('.view-tab'), function(b){ b.classList.toggle('active', b===btn); });
+      document.getElementById('toolbar').hidden = currentView !== 'list';
+      document.getElementById('count').hidden = currentView !== 'list';
+      document.getElementById('list').hidden = currentView !== 'list';
+      document.getElementById('mapViewWrap').hidden = currentView !== 'map';
+      if(currentView === 'map'){
+        renderMapView();
+        setTimeout(function(){ if(leafletMap) leafletMap.invalidateSize(); }, 60);
+      }
+    });
+  });
 
   /* ---------- PWA install ---------- */
   var deferredPrompt = null;
