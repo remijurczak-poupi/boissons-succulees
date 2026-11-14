@@ -65,10 +65,23 @@ header.top h1 span{color:var(--ink);}
 
 .view-tabs{display:flex;gap:8px;margin-bottom:12px;}
 .view-tab{
-  flex:1;padding:10px;border-radius:14px;border:2px solid var(--line);background:var(--surface);
-  color:var(--muted);font-weight:700;font-size:13.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;
+  flex:1;padding:9px 4px;border-radius:14px;border:2px solid var(--line);background:var(--surface);
+  color:var(--muted);font-weight:700;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;
+  text-align:center;white-space:normal;line-height:1.2;
 }
 .view-tab.active{background:linear-gradient(145deg, var(--orange), var(--orange-deep));color:#fff;border-color:transparent;}
+
+.wish-actions{display:flex;gap:6px;flex-shrink:0;}
+
+.badges-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.badge-chip{
+  background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px 8px;text-align:center;
+  box-shadow:var(--shadow);opacity:.4;filter:grayscale(1);min-width:0;
+}
+.badge-chip.unlocked{opacity:1;filter:none;border-color:transparent;background:linear-gradient(160deg, var(--surface), var(--surface-2));}
+.badge-icon{font-size:26px;margin-bottom:4px;}
+.badge-label{font-size:10.5px;font-weight:700;color:var(--muted);line-height:1.25;}
+.badge-chip.unlocked .badge-label{color:var(--ink);}
 
 .map-box{height:360px;border-radius:18px;overflow:hidden;border:2px solid var(--line);margin-bottom:12px;background:var(--surface-2);}
 .map-box .leaflet-popup-content{font-family:'Nunito',sans-serif;font-size:13px;}
@@ -190,10 +203,15 @@ textarea{min-height:60px;resize:vertical;}
   <div class="view-tabs" id="viewTabs">
     <button type="button" class="view-tab active" data-view="list">📋 Liste</button>
     <button type="button" class="view-tab" data-view="map">🗺️ Carte</button>
+    <button type="button" class="view-tab" data-view="wishlist">⭐ À tester</button>
+    <button type="button" class="view-tab" data-view="badges">🏅 Badges</button>
   </div>
 
   <div class="toolbar" id="toolbar">
     <input type="text" id="search" placeholder="Rechercher...">
+    <select id="filterPays">
+      <option value="">Tous les pays</option>
+    </select>
     <select id="sortBy">
       <option value="date-desc">Plus récent</option>
       <option value="date-asc">Plus ancien</option>
@@ -211,6 +229,16 @@ textarea{min-height:60px;resize:vertical;}
     <div class="map-box" id="mapContainer"></div>
     <div class="count" id="mapCount"></div>
     <div class="list" id="mapPlaces"></div>
+  </div>
+
+  <div id="wishViewWrap" hidden>
+    <div class="count" id="wishCount"></div>
+    <div class="list" id="wishList"></div>
+  </div>
+
+  <div id="badgesViewWrap" hidden>
+    <div class="count" id="badgesCount"></div>
+    <div class="badges-grid" id="badgesGrid"></div>
   </div>
 </div>
 
@@ -311,14 +339,45 @@ textarea{min-height:60px;resize:vertical;}
   </div>
 </div>
 
+<div class="sheet-overlay" id="wishSheetOverlay" hidden>
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <h2>Ajouter une envie</h2>
+      <button class="icon-btn" id="wishSheetClose" type="button" aria-label="Fermer">✕</button>
+    </div>
+    <form id="wishForm">
+      <div class="field" id="wishNameField">
+        <label for="w-name">Nom du soda</label>
+        <input type="text" id="w-name" placeholder="Ex. Irn-Bru">
+        <div id="wishNameError" style="display:none;color:var(--danger);font-size:12px;font-weight:700;">Donne un nom avant d'ajouter.</div>
+      </div>
+      <div class="field">
+        <label for="w-brand">Marque (optionnel)</label>
+        <input type="text" id="w-brand" placeholder="Ex. Barr">
+      </div>
+      <div class="field">
+        <label for="w-note">Pourquoi tu veux le tester ? (optionnel)</label>
+        <textarea id="w-note" placeholder="Vu chez..., recommandé par..."></textarea>
+      </div>
+      <div class="actions">
+        <button type="submit" class="btn btn-primary" style="flex:1;">Ajouter à ma liste</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 (function(){
   var STORAGE_KEY = 'carnet-sodas-v1';
   var GEOCACHE_KEY = 'carnet-sodas-geocache-v1';
+  var WISHLIST_KEY = 'carnet-sodas-wishlist-v1';
   var drinks = [];
   var geocache = {};
+  var wishlist = [];
   var editingId = null;
+  var convertingWishId = null;
   var pendingPhotos = [];
   var html5Qr = null;
   var currentView = 'list';
@@ -331,6 +390,9 @@ textarea{min-height:60px;resize:vertical;}
     try{
       geocache = JSON.parse(localStorage.getItem(GEOCACHE_KEY)) || {};
     }catch(e){ geocache = {}; }
+    try{
+      wishlist = JSON.parse(localStorage.getItem(WISHLIST_KEY)) || [];
+    }catch(e){ wishlist = []; }
   }
   function save(){
     try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(drinks)); }
@@ -338,6 +400,9 @@ textarea{min-height:60px;resize:vertical;}
   }
   function saveGeocache(){
     try{ localStorage.setItem(GEOCACHE_KEY, JSON.stringify(geocache)); }catch(e){}
+  }
+  function saveWishlist(){
+    try{ localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist)); }catch(e){}
   }
   function seed(){
     var today = new Date().toISOString().slice(0,10);
@@ -533,12 +598,15 @@ textarea{min-height:60px;resize:vertical;}
 
   /* ---------- Sheet open/close ---------- */
   var overlay = document.getElementById('sheetOverlay');
-  document.getElementById('fabAdd').addEventListener('click', function(){ openSheet(null); });
+  document.getElementById('fabAdd').addEventListener('click', function(){
+    if(currentView === 'wishlist') openWishSheet(); else openSheet(null);
+  });
   document.getElementById('sheetClose').addEventListener('click', closeSheet);
   overlay.addEventListener('click', function(e){ if(e.target === overlay) closeSheet(); });
 
   function openSheet(id){
     editingId = id;
+    convertingWishId = null;
     pendingPhotos = [];
     isSubmitting = false;
     document.getElementById('drinkForm').reset();
@@ -577,6 +645,15 @@ textarea{min-height:60px;resize:vertical;}
   function closeSheet(){
     stopScan();
     overlay.hidden = true;
+  }
+  function openSheetFromWish(id){
+    var w = wishlist.find(function(x){ return x.id === id; });
+    if(!w) return;
+    openSheet(null);
+    convertingWishId = id;
+    document.getElementById('sheetTitle').textContent = 'Tu l\'as testé !';
+    document.getElementById('f-name').value = w.name;
+    document.getElementById('f-brand').value = w.brand || '';
   }
 
   document.getElementById('deleteBtn').addEventListener('click', function(){
@@ -624,11 +701,152 @@ textarea{min-height:60px;resize:vertical;}
       if(idx > -1) drinks[idx] = entry;
     } else {
       drinks.unshift(entry);
+      if(convertingWishId){
+        wishlist = wishlist.filter(function(w){ return w.id !== convertingWishId; });
+        saveWishlist();
+        convertingWishId = null;
+      }
     }
     save();
     closeSheet();
     render();
   });
+
+  /* ---------- Wishlist ("À tester") ---------- */
+  var wishOverlay = document.getElementById('wishSheetOverlay');
+  document.getElementById('wishSheetClose').addEventListener('click', closeWishSheet);
+  wishOverlay.addEventListener('click', function(e){ if(e.target === wishOverlay) closeWishSheet(); });
+
+  function openWishSheet(){
+    document.getElementById('wishForm').reset();
+    document.getElementById('wishNameField').classList.remove('error');
+    document.getElementById('wishNameError').style.display = 'none';
+    wishIsSubmitting = false;
+    wishOverlay.hidden = false;
+  }
+  function closeWishSheet(){
+    wishOverlay.hidden = true;
+  }
+
+  var wishIsSubmitting = false;
+  document.getElementById('wishForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    if(wishIsSubmitting) return;
+    var nameInput = document.getElementById('w-name');
+    var nameField = document.getElementById('wishNameField');
+    var name = nameInput.value.trim();
+    if(!name){
+      nameField.classList.add('error');
+      document.getElementById('wishNameError').style.display = 'block';
+      nameInput.focus();
+      return;
+    }
+    nameField.classList.remove('error');
+    document.getElementById('wishNameError').style.display = 'none';
+    wishIsSubmitting = true;
+    wishlist.unshift({
+      id: uid(),
+      name: name,
+      brand: document.getElementById('w-brand').value.trim(),
+      note: document.getElementById('w-note').value.trim(),
+      date: new Date().toISOString().slice(0,10)
+    });
+    saveWishlist();
+    closeWishSheet();
+    renderWishlist();
+  });
+
+  function renderWishlist(){
+    var el = document.getElementById('wishList');
+    document.getElementById('wishCount').textContent =
+      wishlist.length + (wishlist.length===1 ? ' envie' : ' envies');
+    if(!wishlist.length){
+      el.innerHTML = '<div class="empty"><div class="big">⭐</div><div class="display">Aucune envie pour l\'instant</div>Ajoute un soda que tu veux essayer avec le +.</div>';
+      return;
+    }
+    el.innerHTML = wishlist.map(function(w){
+      return '<div class="card">' +
+        '<div class="thumb">⭐</div>' +
+        '<div class="main">' +
+          '<div class="name">'+escapeHtml(w.name)+'</div>' +
+          (w.brand ? '<div class="brand">'+escapeHtml(w.brand)+'</div>' : '') +
+          (w.note ? '<div class="meta">'+escapeHtml(w.note)+'</div>' : '') +
+        '</div>' +
+        '<div class="wish-actions">' +
+          '<button type="button" class="icon-btn wish-try" data-id="'+w.id+'" title="Je l\'ai testé">✅</button>' +
+          '<button type="button" class="icon-btn wish-del" data-id="'+w.id+'" title="Retirer">✕</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    Array.prototype.forEach.call(el.querySelectorAll('.wish-try'), function(btn){
+      btn.addEventListener('click', function(){ openSheetFromWish(btn.dataset.id); });
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('.wish-del'), function(btn){
+      btn.addEventListener('click', function(){
+        wishlist = wishlist.filter(function(w){ return w.id !== btn.dataset.id; });
+        saveWishlist();
+        renderWishlist();
+      });
+    });
+  }
+
+  /* ---------- Badges ---------- */
+  var BADGES = [
+    { icon:'🥤', label:'Premier soda', check: function(s){ return s.total >= 1; } },
+    { icon:'🔟', label:'10 sodas testés', check: function(s){ return s.total >= 10; } },
+    { icon:'💯', label:'100 sodas testés', check: function(s){ return s.total >= 100; } },
+    { icon:'📍', label:'5 lieux différents', check: function(s){ return s.places >= 5; } },
+    { icon:'🌍', label:'5 pays différents', check: function(s){ return s.countries >= 5; } },
+    { icon:'🌎', label:'10 pays différents', check: function(s){ return s.countries >= 10; } },
+    { icon:'🏷️', label:'5 marques différentes', check: function(s){ return s.brands >= 5; } },
+    { icon:'⭐', label:'Un coup de cœur (10/10)', check: function(s){ return s.hasMaxRating; } },
+    { icon:'🧊', label:'Un soda 0g de sucre', check: function(s){ return s.hasZeroSugar; } },
+    { icon:'📸', label:'10 photos prises', check: function(s){ return s.photoCount >= 10; } },
+    { icon:'🗓️', label:'7 jours de dégustation', check: function(s){ return s.distinctDays >= 7; } },
+    { icon:'🏆', label:'Moyenne ≥ 8 (5 sodas min.)', check: function(s){ return s.total >= 5 && s.avg >= 8; } }
+  ];
+
+  function computeStats(){
+    var countries = {}, places = {}, brands = {}, days = {};
+    var hasMaxRating = false, hasZeroSugar = false, photoCount = 0, sumRating = 0;
+    drinks.forEach(function(d){
+      if(d.pays) countries[d.pays.trim().toLowerCase()] = true;
+      if(d.lieu) places[d.lieu.trim().toLowerCase()] = true;
+      if(d.brand) brands[d.brand.trim().toLowerCase()] = true;
+      if(d.date) days[d.date] = true;
+      if(d.rating === 10) hasMaxRating = true;
+      if(d.sucre === 0) hasZeroSugar = true;
+      photoCount += (d.photos ? d.photos.length : 0);
+      sumRating += (d.rating || 0);
+    });
+    var total = drinks.length;
+    return {
+      total: total,
+      countries: Object.keys(countries).length,
+      places: Object.keys(places).length,
+      brands: Object.keys(brands).length,
+      distinctDays: Object.keys(days).length,
+      hasMaxRating: hasMaxRating,
+      hasZeroSugar: hasZeroSugar,
+      photoCount: photoCount,
+      avg: total ? sumRating/total : 0
+    };
+  }
+
+  function renderBadges(){
+    var s = computeStats();
+    var unlocked = 0;
+    var html = BADGES.map(function(b){
+      var ok = b.check(s);
+      if(ok) unlocked++;
+      return '<div class="badge-chip'+(ok?' unlocked':'')+'">' +
+        '<div class="badge-icon">'+b.icon+'</div>' +
+        '<div class="badge-label">'+b.label+'</div>' +
+      '</div>';
+    }).join('');
+    document.getElementById('badgesCount').textContent = unlocked + ' / ' + BADGES.length + ' débloqués';
+    document.getElementById('badgesGrid').innerHTML = html;
+  }
 
   /* ---------- List rendering ---------- */
   function renderStats(){
@@ -643,10 +861,24 @@ textarea{min-height:60px;resize:vertical;}
       '<div class="stat"><div class="num">' + (avgSucre!=null ? avgSucre.toFixed(1)+'g' : '–') + '</div><div class="label">Sucre moyen /100ml</div></div>';
   }
 
+  function renderPaysFilterOptions(){
+    var sel = document.getElementById('filterPays');
+    var current = sel.value;
+    var countries = {};
+    drinks.forEach(function(d){ if(d.pays) countries[d.pays.trim()] = true; });
+    var list = Object.keys(countries).sort(function(a,b){ return a.localeCompare(b,'fr'); });
+    sel.innerHTML = '<option value="">Tous les pays</option>' + list.map(function(p){
+      return '<option value="'+escapeHtml(p)+'">'+escapeHtml(p)+'</option>';
+    }).join('');
+    if(list.indexOf(current) !== -1) sel.value = current;
+  }
+
   function getFiltered(){
     var q = document.getElementById('search').value.trim().toLowerCase();
     var sort = document.getElementById('sortBy').value;
+    var paysFilter = document.getElementById('filterPays').value;
     var list = drinks.filter(function(d){
+      if(paysFilter && (d.pays||'') !== paysFilter) return false;
       if(!q) return true;
       var hay = (d.name+' '+(d.brand||'')+' '+(d.lieu||'')+' '+(d.pays||'')+' '+(d.note||'')).toLowerCase();
       return hay.indexOf(q) !== -1;
@@ -685,6 +917,7 @@ textarea{min-height:60px;resize:vertical;}
 
   function render(){
     renderStats();
+    renderPaysFilterOptions();
     var list = getFiltered();
     document.getElementById('count').textContent =
       list.length + (list.length===1?' soda':' sodas') + (drinks.length!==list.length ? ' sur '+drinks.length : '');
@@ -715,10 +948,13 @@ textarea{min-height:60px;resize:vertical;}
       card.addEventListener('click', function(){ openSheet(card.dataset.id); });
     });
     if(currentView === 'map') renderMapView();
+    if(currentView === 'badges') renderBadges();
+    if(currentView === 'wishlist') renderWishlist();
   }
 
   document.getElementById('search').addEventListener('input', render);
   document.getElementById('sortBy').addEventListener('change', render);
+  document.getElementById('filterPays').addEventListener('change', render);
 
   /* ---------- Map view (par ville/pays) ---------- */
   var leafletMap = null;
@@ -863,9 +1099,15 @@ textarea{min-height:60px;resize:vertical;}
       document.getElementById('count').hidden = currentView !== 'list';
       document.getElementById('list').hidden = currentView !== 'list';
       document.getElementById('mapViewWrap').hidden = currentView !== 'map';
+      document.getElementById('wishViewWrap').hidden = currentView !== 'wishlist';
+      document.getElementById('badgesViewWrap').hidden = currentView !== 'badges';
       if(currentView === 'map'){
         renderMapView();
         setTimeout(function(){ if(leafletMap) leafletMap.invalidateSize(); }, 60);
+      } else if(currentView === 'wishlist'){
+        renderWishlist();
+      } else if(currentView === 'badges'){
+        renderBadges();
       }
     });
   });
