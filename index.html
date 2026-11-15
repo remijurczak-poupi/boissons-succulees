@@ -227,6 +227,14 @@ textarea{min-height:60px;resize:vertical;}
 
   <div class="toolbar" id="toolbar">
     <input type="text" id="search" placeholder="Rechercher...">
+    <select id="filterType">
+      <option value="">Tous les types</option>
+      <option value="Soda">🥤 Soda</option>
+      <option value="Eau">💧 Eau</option>
+      <option value="Bière">🍺 Bière</option>
+      <option value="Alcool fort">🥃 Alcool fort</option>
+      <option value="Autre">🏷️ Autre</option>
+    </select>
     <select id="filterPays">
       <option value="">Tous les pays</option>
     </select>
@@ -291,6 +299,16 @@ textarea{min-height:60px;resize:vertical;}
         <label for="f-name">Nom de la boisson</label>
         <input type="text" id="f-name" placeholder="Ex. Fanta Orange, Coca Zero…">
         <div id="nameError" style="display:none;color:var(--danger);font-size:12px;font-weight:700;">Donne un nom à cette boisson avant d'enregistrer.</div>
+      </div>
+      <div class="field">
+        <label for="f-type">Type</label>
+        <select id="f-type">
+          <option value="Soda">🥤 Soda</option>
+          <option value="Eau">💧 Eau</option>
+          <option value="Bière">🍺 Bière</option>
+          <option value="Alcool fort">🥃 Alcool fort</option>
+          <option value="Autre">🏷️ Autre</option>
+        </select>
       </div>
       <div class="row2">
         <div class="field">
@@ -576,7 +594,7 @@ import {
   function seed(){
     var today = new Date().toISOString().slice(0,10);
     return [{
-      id:'s1', name:'Fanta Orange (exemple)', brand:'Coca-Cola', barcode:'',
+      id:'s1', name:'Fanta Orange (exemple)', type:'Soda', brand:'Coca-Cola', barcode:'',
       rating:7, lieu:'Lyon, France', pays:'États-Unis', prix:1.5, sucre:11.4, yuka:35, date:today,
       note:"Exemple — modifie ou supprime cette entrée.", photos:[]
     }];
@@ -792,6 +810,7 @@ import {
       document.getElementById('submitBtn').textContent = 'Enregistrer';
       document.getElementById('deleteBtn').hidden = false;
       document.getElementById('f-name').value = d.name;
+      document.getElementById('f-type').value = d.type || 'Soda';
       document.getElementById('f-brand').value = d.brand || '';
       document.getElementById('f-barcode').value = d.barcode || '';
       ratingInput.value = d.rating; syncRatingDisplay();
@@ -853,6 +872,7 @@ import {
     var entry = {
       id: editingId || uid(),
       name: name,
+      type: document.getElementById('f-type').value,
       brand: document.getElementById('f-brand').value.trim(),
       barcode: document.getElementById('f-barcode').value.trim(),
       rating: parseFloat(ratingInput.value),
@@ -1037,8 +1057,10 @@ import {
     var q = document.getElementById('search').value.trim().toLowerCase();
     var sort = document.getElementById('sortBy').value;
     var paysFilter = document.getElementById('filterPays').value;
+    var typeFilter = document.getElementById('filterType').value;
     var list = drinks.filter(function(d){
       if(paysFilter && (d.pays||'') !== paysFilter) return false;
+      if(typeFilter && (d.type||'Soda') !== typeFilter) return false;
       if(!q) return true;
       var hay = (d.name+' '+(d.brand||'')+' '+(d.lieu||'')+' '+(d.pays||'')+' '+(d.note||'')).toLowerCase();
       return hay.indexOf(q) !== -1;
@@ -1086,10 +1108,13 @@ import {
       container.innerHTML = '<div class="empty"><div class="big">🥤</div><div class="display">Carnet vide</div>Tape sur + pour ajouter ta première boisson.</div>';
       return;
     }
+    var TYPE_EMOJI = { 'Soda':'🥤', 'Eau':'💧', 'Bière':'🍺', 'Alcool fort':'🥃', 'Autre':'🏷️' };
     container.innerHTML = list.map(function(d){
-      var thumb = d.photos && d.photos[0] ? '<img class="thumb" src="'+d.photos[0]+'">' : '<div class="thumb">🥤</div>';
+      var typeEmoji = TYPE_EMOJI[d.type] || '🥤';
+      var thumb = d.photos && d.photos[0] ? '<img class="thumb" src="'+d.photos[0]+'">' : '<div class="thumb">'+typeEmoji+'</div>';
       var scoreBg = scoreColor((d.rating||0)*10);
       var bits = [];
+      if(d.type) bits.push(typeEmoji+' '+escapeHtml(d.type));
       if(d.lieu) bits.push('📍 '+escapeHtml(d.lieu));
       if(d.pays) bits.push('🌍 '+escapeHtml(d.pays));
       if(d.prix != null) bits.push(d.prix.toFixed(2)+' €');
@@ -1115,6 +1140,7 @@ import {
   document.getElementById('search').addEventListener('input', render);
   document.getElementById('sortBy').addEventListener('change', render);
   document.getElementById('filterPays').addEventListener('change', render);
+  document.getElementById('filterType').addEventListener('change', render);
 
   /* ---------- Map view (par ville/pays) ---------- */
   var leafletMap = null;
