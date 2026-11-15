@@ -722,7 +722,11 @@ import {
 
   function stopScan(){
     if(html5Qr){
-      html5Qr.stop().then(function(){ html5Qr.clear(); }).catch(function(){});
+      var scanner = html5Qr;
+      html5Qr = null;
+      try{
+        scanner.stop().then(function(){ scanner.clear(); }).catch(function(){});
+      }catch(e){ /* le scanner n'était pas en train de tourner : rien à faire */ }
     }
     scanBox.classList.remove('active');
   }
